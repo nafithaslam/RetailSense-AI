@@ -1,0 +1,63 @@
+# RetailSense AI - Project Constitution
+
+## Vision
+
+RetailSense AI is a modern retail management platform that will evolve into an AI-powered retail intelligence platform.
+
+The goal is to build software that could realistically be used by retail businesses while learning professional AI-assisted software engineering practices.
+
+---
+
+## Mission
+
+Build Version 1 as a production-quality retail management system.
+
+Then enhance it with AI capabilities such as:
+
+- Customer Segmentation
+- Churn Prediction
+- Recommendation Engine
+- Demand Forecasting
+- AI Business Assistant
+
+---
+
+## Development Principles
+
+1. Architecture before implementation.
+2. Build one module at a time.
+3. AI generates the first draft.
+4. Engineers review and improve.
+5. Every feature must solve a business problem.
+6. Code should be modular and maintainable.
+7. Documentation is part of the product.
+8. Build for future AI integration.
+
+---
+
+## Team Roles
+
+### Senior Solution Architect
+Designs the system.
+
+### Junior AI Solution Engineer
+Implements, integrates, reviews and learns.
+
+---
+
+## Success Criteria
+
+The project should demonstrate:
+
+- Software Architecture
+- Backend Development
+- API Design
+- Database Design
+- AI Integration
+- Production Thinking
+- Professional Documentation
+
+---
+
+Version: 1.0
+Status: Active

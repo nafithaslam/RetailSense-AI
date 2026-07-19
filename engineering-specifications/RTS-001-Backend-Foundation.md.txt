@@ -1,0 +1,70 @@
+# RTS-001 – Backend Foundation
+
+## Objective
+
+Create the backend foundation for RetailSense AI.
+
+## Technology Stack
+
+- Python 3.12+
+- FastAPI
+- PostgreSQL
+- SQLAlchemy
+- Pydantic
+- Uvicorn
+
+## Requirements
+
+Create a production-ready FastAPI backend with a modular structure.
+
+The generated project should include:
+
+- Application entry point
+- Configuration management
+- Database connection setup
+- Health check endpoint
+- Environment variable support
+- Swagger documentation
+- Dependency-ready architecture
+- Logging configuration
+- Error handling foundation
+
+## Folder Structure
+
+backend/
+    app/
+        api/
+        core/
+        database/
+        models/
+        schemas/
+        services/
+        utils/
+        main.py
+
+## Health Endpoint
+
+GET /health
+
+Response:
+
+{
+    "status": "healthy",
+    "application": "RetailSense AI"
+}
+
+## Quality Requirements
+
+- Python type hints
+- Clean architecture
+- Modular code
+- PEP8 compliant
+- Ready for JWT integration
+- Ready for future AI modules
+
+## Do NOT Implement
+
+- Authentication
+- User management
+- Business logic
+- Frontend

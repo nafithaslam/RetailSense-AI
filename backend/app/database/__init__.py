@@ -1,0 +1,3 @@
+"""
+RetailSense AI — database package
+"""

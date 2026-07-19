@@ -1,0 +1,33 @@
+# ADR-001: Technology Stack
+
+## Status
+Accepted
+
+## Decision
+
+Frontend:
+- React (later)
+
+Backend:
+- FastAPI
+
+Database:
+- PostgreSQL 17
+
+ORM:
+- SQLAlchemy Async
+
+Authentication:
+- JWT
+
+Password Hashing:
+- bcrypt
+
+AI Tools:
+- ChatGPT
+- Antigravity Pro
+- Claude
+
+## Rationale
+
+Selected for high performance, excellent AI ecosystem compatibility, async support, and production readiness.
