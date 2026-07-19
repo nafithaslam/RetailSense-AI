@@ -49,10 +49,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import EmailStr, Field, field_validator
+from pydantic import EmailStr, Field, field_validator, model_validator
+from typing import TYPE_CHECKING
 
 from app.models.user import UserRole
 from app.schemas.base import BaseSchema
+
+if TYPE_CHECKING:
+    from app.core.permissions import Permission
 
 
 # --------------------------------------------------------------------------- #
@@ -96,11 +100,18 @@ class LoginRequest(BaseSchema):
 
 
 class RegisterRequest(BaseSchema):
-    """Payload required to create a new user account.
+    """Payload required to create a new user account via public self-registration.
 
     This schema mirrors ``app.schemas.user.UserCreate`` but lives in the auth
     module so that the auth service has a single, authoritative input type
     without a circular dependency on the user schema.
+
+    Role assignment
+    ---------------
+    The ``role`` field is intentionally **absent** from this schema.  All
+    accounts created through public self-registration are unconditionally
+    assigned the ``STAFF`` role by the service layer.  Assigning any other
+    role requires an authenticated ``ADMIN`` caller via ``POST /users/``.
 
     Password constraints
     --------------------
@@ -117,9 +128,6 @@ class RegisterRequest(BaseSchema):
     password:
         Plain-text password.  **Never** stored; the auth service hashes it
         via :func:`~app.core.security.hash_password` before writing.
-    role:
-        Access tier for the new account.  Defaults to ``STAFF`` (least
-        privilege) — only an ``ADMIN`` caller should override this.
     """
 
     full_name: str = Field(
@@ -142,12 +150,6 @@ class RegisterRequest(BaseSchema):
         max_length=128,
         examples=["S3cur3P@ssword!"],
         description="Plain-text password.  Will be hashed before storage.",
-    )
-
-    role: UserRole = Field(
-        default=UserRole.STAFF,
-        examples=[UserRole.STAFF],
-        description="Access role for the new account.  Defaults to STAFF.",
     )
 
     @field_validator("full_name", mode="before")
@@ -253,6 +255,11 @@ class AuthenticatedUser(BaseSchema):
         The access tier assigned to this account.
     is_active:
         Whether the account is currently enabled.
+    permissions:
+        Fine-grained capability set derived from ``role`` via
+        :data:`~app.core.permissions.ROLE_PERMISSIONS`.  Populated
+        automatically by the ``model_validator`` — callers never need to
+        supply this field.  Serialises as a JSON array of permission strings.
 
     Note: ``password_hash`` and audit timestamps are intentionally excluded
     from this schema.
@@ -288,6 +295,31 @@ class AuthenticatedUser(BaseSchema):
         examples=[True],
     )
 
+    permissions: frozenset[str] = Field(
+        default_factory=frozenset,
+        description=(
+            "Fine-grained permissions derived from the user's role.  "
+            "Populated automatically — do not supply this field."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _populate_permissions(self) -> "AuthenticatedUser":
+        """Derive the permission set from the user's role.
+
+        Called automatically by Pydantic after all field validators have run.
+        Imports :data:`~app.core.permissions.ROLE_PERMISSIONS` at call time
+        to avoid a module-level circular import.
+        """
+        from app.core.permissions import ROLE_PERMISSIONS
+
+        # Convert Permission enum values to plain strings for JSON
+        # serialisation (Pydantic renders frozenset as a JSON array).
+        self.permissions = frozenset(
+            p.value for p in ROLE_PERMISSIONS.get(self.role, frozenset())
+        )
+        return self
+
 
 # --------------------------------------------------------------------------- #
 # Internal / service-layer DTOs                                                 #
@@ -308,6 +340,11 @@ class TokenPayload(BaseSchema):
         Subject claim — the user's UUID as a plain string (the form stored
         by ``python-jose``).  Parse to :class:`~uuid.UUID` when you need
         the typed version: ``uuid.UUID(payload.sub)``.
+    role:
+        Role claim embedded in the token at issuance (Sprint 3.3+).
+        Optional so that tokens issued before Sprint 3.3 (which lack the
+        claim) still decode cleanly.  The authoritative role is always the
+        value fetched from the database by ``get_current_user``.
     iat:
         Issued-at timestamp (UTC epoch seconds).
     exp:
@@ -317,6 +354,14 @@ class TokenPayload(BaseSchema):
     sub: str = Field(
         ...,
         description="Subject claim — the user UUID as a string.",
+    )
+
+    role: UserRole | None = Field(
+        default=None,
+        description=(
+            "Role claim from the JWT payload, if present.  "
+            "Informational only — the DB record is always authoritative."
+        ),
     )
 
     iat: datetime = Field(

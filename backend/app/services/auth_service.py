@@ -69,7 +69,8 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.models.user import UserRole
+from app.core.domain_exceptions import UserNotFoundError
+from app.models.user import User as UserModel, UserRole
 from app.repositories.user_repository import UserRepository
 from app.schemas.auth import (
     AuthenticatedUser,
@@ -109,12 +110,10 @@ class RegistrationError(Exception):
     """
 
 
-class UserNotFoundError(Exception):
-    """Raised when a lookup by ID or email yields no result.
-
-    The route layer maps this to HTTP 404.
-    """
-
+# Re-export UserNotFoundError from the shared domain exceptions module so
+# that existing importers of ``app.services.auth_service.UserNotFoundError``
+# continue to work without modification.
+UserNotFoundError = UserNotFoundError  # noqa: F811
 
 # --------------------------------------------------------------------------- #
 # Login / registration result DTO                                               #
@@ -225,12 +224,14 @@ class AuthService:
         # 2. Hash the password — plain text never touches the DB layer
         hashed = hash_password(payload.password)
 
-        # 3. Persist the user
+        # 3. Persist the user — role is always STAFF for public registration.
+        #    RegisterRequest no longer carries a role field (Sprint 3.3).
+        #    Admin-initiated user creation goes through POST /users/ instead.
         user = await self._repo.create(
             full_name=payload.full_name,
             email=payload.email,
             password_hash=hashed,
-            role=payload.role,
+            role=UserRole.STAFF,
         )
 
         logger.info(
@@ -359,19 +360,26 @@ class AuthService:
     # Private helpers                                                          #
     # ---------------------------------------------------------------------- #
 
-    def _build_token(self, user_id: str) -> Token:
-        """Create a signed access token for the given user UUID string.
+    def _build_token(self, user: "UserModel") -> Token:
+        """Create a signed access token for the given user.
+
+        Embeds the user's ``role`` in the JWT payload (Sprint 3.3) so that
+        API gateways and frontend clients can inspect the role without a DB
+        round-trip.  The FastAPI dependency chain still verifies against the
+        database on every protected request.
 
         Args:
-            user_id: String representation of the user's UUID (the value
-                that will be placed in the ``sub`` claim).
+            user: The :class:`~app.models.user.User` ORM instance whose
+                ``id`` becomes the ``sub`` claim and whose ``role`` becomes
+                the ``role`` claim.
 
         Returns:
             A populated :class:`~app.schemas.auth.Token` schema instance.
         """
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            subject=user_id,
+            subject=str(user.id),
+            role=user.role,
             expires_delta=expires_delta,
         )
         return Token(
@@ -395,10 +403,8 @@ class AuthService:
             A :class:`LoginResult` ready to be returned from a service
             method.
         """
-        from app.models.user import User as UserModel  # local import avoids circulars
-
         assert isinstance(user, UserModel)
 
-        token = self._build_token(str(user.id))
+        token = self._build_token(user)
         authenticated_user = AuthenticatedUser.model_validate(user)
         return LoginResult(token=token, user=authenticated_user)

@@ -21,6 +21,7 @@ from fastapi import APIRouter
 
 from app.api import health
 from app.api.v1 import auth as auth_v1
+from app.api.v1 import users as users_v1
 
 # Root-level (unversioned) router — health check lives here
 api_router = APIRouter()
@@ -33,6 +34,11 @@ api_router.include_router(health.router)
 
 api_router.include_router(
     auth_v1.router,
+    prefix="/api/v1",
+)
+
+api_router.include_router(
+    users_v1.router,
     prefix="/api/v1",
 )
 

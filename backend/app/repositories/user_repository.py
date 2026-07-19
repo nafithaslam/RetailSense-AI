@@ -171,6 +171,25 @@ class UserRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def count_all(self) -> int:
+        """Return the total number of user rows in the table.
+
+        Used by :meth:`list_all` callers to compute pagination metadata
+        without fetching full ORM objects.
+
+        Returns:
+            An integer count of all ``users`` rows.
+
+        Example::
+
+            total = await repo.count_all()
+            page_count = -(-total // page_size)   # ceiling division
+        """
+        from sqlalchemy import func
+
+        result = await self._db.execute(select(func.count()).select_from(User))
+        return result.scalar_one()
+
     # ---------------------------------------------------------------------- #
     # Write operations                                                         #
     # ---------------------------------------------------------------------- #
@@ -267,6 +286,33 @@ class UserRepository:
             "user.status_updated",
             user_id=str(user.id),
             is_active=is_active,
+        )
+        return user
+
+    async def update_role(self, user: User, *, new_role: UserRole) -> User:
+        """Assign a new role to an existing user record.
+
+        Args:
+            user: The ORM instance to update.  Must already be associated
+                with the current session.
+            new_role: The :class:`~app.models.user.UserRole` to assign.
+
+        Returns:
+            The same ``user`` instance with the updated role.
+
+        Example::
+
+            user = await repo.get_by_id(user_id)
+            user = await repo.update_role(user, new_role=UserRole.MANAGER)
+        """
+        user.role = new_role
+        await self._db.flush()
+        await self._db.refresh(user)
+
+        logger.debug(
+            "user.role_updated",
+            user_id=str(user.id),
+            new_role=new_role.value,
         )
         return user
 

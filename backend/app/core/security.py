@@ -28,10 +28,16 @@ Token payload shape
 ::
 
     {
-        "sub": "<user_id or username>",
-        "iat": <unix epoch – issued-at>,
-        "exp": <unix epoch – expiry>
+        "sub":  "<user_id or username>",
+        "role": "<UserRole value, e.g. 'admin'>",  # present when role is supplied
+        "iat":  <unix epoch – issued-at>,
+        "exp":  <unix epoch – expiry>
     }
+
+The ``role`` claim is **informational** — it enables API gateways and frontend
+clients to inspect the caller's role without a DB round-trip.  All FastAPI
+protected routes still verify against the database on every request, so
+deactivation or role changes take effect immediately.
 """
 
 from __future__ import annotations
@@ -46,6 +52,7 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.models.user import UserRole
 
 # --------------------------------------------------------------------------- #
 # Module logger                                                                 #
@@ -159,20 +166,29 @@ def verify_password(password: str, hashed_password: str) -> bool:
 
 def create_access_token(
     subject: str | UUID,
+    role: UserRole | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
     """Create a signed HS256 JWT access token.
 
-    The token payload always contains three standard claims:
+    The token payload always contains three standard claims plus an optional
+    ``role`` claim introduced in Sprint 3.3:
 
-    * ``sub`` — the principal identifier (user id or username).
-    * ``iat`` — issued-at timestamp (UTC).
-    * ``exp`` — expiry timestamp (UTC).
+    * ``sub``  — the principal identifier (user id or username).
+    * ``role`` — the user's :class:`~app.models.user.UserRole` value as a
+      plain string (e.g. ``"admin"``).  Present only when *role* is supplied.
+      This claim is **informational** — the authoritative source is always the
+      database record fetched by the ``get_current_user`` dependency.
+    * ``iat``  — issued-at timestamp (UTC).
+    * ``exp``  — expiry timestamp (UTC).
 
     Args:
         subject: The entity the token represents.  Typically a user UUID or
             username string.  A :class:`~uuid.UUID` is automatically converted
             to its string representation.
+        role: The user's access tier.  When supplied, embedded in the payload
+            as ``role: <role.value>``.  Existing call sites that omit this
+            argument continue to work — the claim is simply absent.
         expires_delta: How long the token should be valid.  When ``None`` the
             :data:`~app.core.config.Settings.ACCESS_TOKEN_EXPIRE_MINUTES`
             setting is used as the default lifetime.
@@ -182,7 +198,7 @@ def create_access_token(
 
     Example::
 
-        token = create_access_token(subject=user.id)
+        token = create_access_token(subject=user.id, role=user.role)
         # Returns e.g. "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...."
     """
     now: datetime = _utc_now()
@@ -198,6 +214,9 @@ def create_access_token(
         "exp": expire,
     }
 
+    if role is not None:
+        payload["role"] = role.value
+
     token: str = jwt.encode(
         payload,
         settings.SECRET_KEY,
@@ -207,6 +226,7 @@ def create_access_token(
     logger.debug(
         "jwt.created",
         subject=_subject_to_str(subject),
+        role=role.value if role is not None else None,
         expires_at=expire.isoformat(),
     )
 

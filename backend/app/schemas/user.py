@@ -170,3 +170,137 @@ class UserResponse(TimestampSchema, UserBase):
         examples=[True],
         description="Whether the user account is active.",
     )
+
+
+# --------------------------------------------------------------------------- #
+# Admin-only request schemas                                                    #
+# --------------------------------------------------------------------------- #
+
+
+class AdminCreateRequest(BaseSchema):
+    """Payload for creating a new user with an explicit role assignment.
+
+    This schema is used exclusively by the admin-only ``POST /users/``
+    endpoint.  Unlike :class:`~app.schemas.auth.RegisterRequest` (public
+    self-registration), this schema allows the caller to specify any
+    :class:`~app.models.user.UserRole` because the route is guarded by
+    ``AdminOnly``.
+
+    Attributes
+    ----------
+    full_name:
+        Display name of the new account holder.
+    email:
+        Unique email address.  Lower-cased before any DB interaction.
+    password:
+        Plain-text password.  Will be hashed before storage.
+    role:
+        Explicit access tier.  Required — the admin must consciously choose
+        the role rather than relying on a default.
+    """
+
+    full_name: str = Field(
+        ...,
+        min_length=2,
+        max_length=255,
+        examples=["Jane Smith"],
+        description="Full display name of the new user.",
+    )
+
+    email: EmailStr = Field(
+        ...,
+        examples=["jane.smith@example.com"],
+        description="Unique email address.  Used for login.",
+    )
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        examples=["S3cur3P@ssword!"],
+        description="Plain-text password.  Will be hashed before storage.",
+    )
+
+    role: UserRole = Field(
+        ...,
+        examples=[UserRole.STAFF],
+        description="Explicit access role for the new account.",
+    )
+
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def strip_full_name(cls, value: str) -> str:
+        """Remove surrounding whitespace from the display name."""
+        return value.strip()
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalise_email(cls, value: str) -> str:
+        """Lowercase and strip the email to match stored normalised value."""
+        return value.strip().lower()
+
+
+class RoleAssignRequest(BaseSchema):
+    """Payload for assigning a new role to an existing user.
+
+    Used by the admin-only ``PATCH /users/{user_id}/role`` endpoint.
+
+    Attributes
+    ----------
+    role:
+        The new :class:`~app.models.user.UserRole` to assign.
+    """
+
+    role: UserRole = Field(
+        ...,
+        examples=[UserRole.MANAGER],
+        description="The new role to assign to the target user.",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Paginated list response                                                       #
+# --------------------------------------------------------------------------- #
+
+
+class PaginatedUsersResponse(BaseSchema):
+    """Envelope returned by ``GET /users/`` containing a paginated user list.
+
+    Attributes
+    ----------
+    total:
+        Total number of users in the database (across all pages).
+    page:
+        Current (1-indexed) page number.
+    page_size:
+        Number of items per page (as requested, capped at the server maximum).
+    items:
+        The user records for this page.  Empty list on the last page when
+        the total is exactly divisible by ``page_size``.
+    """
+
+    total: int = Field(
+        ...,
+        ge=0,
+        description="Total number of users across all pages.",
+        examples=[42],
+    )
+
+    page: int = Field(
+        ...,
+        ge=1,
+        description="Current page number (1-indexed).",
+        examples=[1],
+    )
+
+    page_size: int = Field(
+        ...,
+        ge=1,
+        description="Number of items returned per page.",
+        examples=[20],
+    )
+
+    items: list[UserResponse] = Field(
+        ...,
+        description="User records for the current page.",
+    )

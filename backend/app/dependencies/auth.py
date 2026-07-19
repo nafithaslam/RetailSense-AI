@@ -247,3 +247,154 @@ async def get_current_active_user(
         )
 
     return current_user
+
+
+# --------------------------------------------------------------------------- #
+# Role and permission guard factories                                            #
+# --------------------------------------------------------------------------- #
+
+
+def require_role(*roles: "UserRole") -> "Callable[..., Awaitable[AuthenticatedUser]]":
+    """Return a FastAPI dependency that enforces one or more allowed roles.
+
+    The returned coroutine builds on top of :func:`get_current_active_user`,
+    so it automatically inherits the full token-decode → DB-lookup →
+    active-status check.  No additional DB calls are made; the role comparison
+    is a pure in-memory check against the user profile resolved from the
+    database.
+
+    Args:
+        *roles: One or more :class:`~app.models.user.UserRole` values that are
+            permitted to access the route.  Passing multiple roles creates an
+            OR condition (the user must hold **any** of them).
+
+    Returns:
+        A coroutine dependency suitable for injection via
+        ``Annotated[AuthenticatedUser, Depends(require_role(...))]`` or the
+        pre-built module-level aliases (:data:`AdminOnly`,
+        :data:`ManagerOrAbove`).
+
+    Raises:
+        HTTPException (403): When the resolved user's role is not in *roles*.
+
+    Example::
+
+        @router.delete("/settings")
+        async def delete_settings(
+            user: Annotated[AuthenticatedUser, Depends(require_role(UserRole.ADMIN))],
+        ) -> None:
+            ...
+    """
+    from collections.abc import Awaitable, Callable
+
+    async def _role_guard(
+        current_user: Annotated[AuthenticatedUser, Depends(get_current_active_user)],
+    ) -> AuthenticatedUser:
+        if current_user.role not in roles:
+            role_names = ", ".join(r.value for r in roles)
+            logger.warning(
+                "rbac.role_denied",
+                user_id=str(current_user.id),
+                user_role=current_user.role.value,
+                required_roles=role_names,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"This action requires one of the following roles: {role_names}."
+                ),
+            )
+        return current_user
+
+    return _role_guard
+
+
+def require_permission(
+    permission: "Permission",
+) -> "Callable[..., Awaitable[AuthenticatedUser]]":
+    """Return a FastAPI dependency that enforces a fine-grained permission.
+
+    More granular than :func:`require_role` — use when a route should be
+    accessible to multiple roles but not all members of those roles have the
+    capability (e.g. ``reports:export`` is limited to ADMIN only, while
+    ``reports:read`` is available to MANAGER and ADMIN).
+
+    Args:
+        permission: A :class:`~app.core.permissions.Permission` value that
+            the resolved user must hold.
+
+    Returns:
+        A coroutine dependency similar to :func:`require_role`.
+
+    Raises:
+        HTTPException (403): When the resolved user's role does not include
+            *permission* according to the
+            :data:`~app.core.permissions.ROLE_PERMISSIONS` matrix.
+
+    Example::
+
+        from app.core.permissions import Permission
+
+        @router.get("/reports/export")
+        async def export_report(
+            user: Annotated[AuthenticatedUser,
+                            Depends(require_permission(Permission.REPORTS_EXPORT))],
+        ) -> bytes:
+            ...
+    """
+    from collections.abc import Awaitable, Callable
+
+    from app.core.permissions import has_permission
+
+    async def _permission_guard(
+        current_user: Annotated[AuthenticatedUser, Depends(get_current_active_user)],
+    ) -> AuthenticatedUser:
+        if not has_permission(current_user.role, permission):
+            logger.warning(
+                "rbac.permission_denied",
+                user_id=str(current_user.id),
+                user_role=current_user.role.value,
+                required_permission=permission.value,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    f"You do not have the required permission: '{permission.value}'."
+                ),
+            )
+        return current_user
+
+    return _permission_guard
+
+
+# --------------------------------------------------------------------------- #
+# Pre-built dependency aliases                                                  #
+# --------------------------------------------------------------------------- #
+
+#: Type alias imported by UserRole — resolved here to avoid circular imports.
+from app.models.user import UserRole  # noqa: E402
+from app.core.permissions import Permission  # noqa: E402
+
+#: Dependency alias — restricts a route to ADMIN role only.
+#:
+#: Usage::
+#:
+#:     @router.patch("/users/{user_id}/role")
+#:     async def assign_role(
+#:         actor: Annotated[AuthenticatedUser, AdminOnly],
+#:         ...
+#:     ) -> UserResponse:
+#:         ...
+AdminOnly = Depends(require_role(UserRole.ADMIN))
+
+#: Dependency alias — allows ADMIN or MANAGER.
+#:
+#: Usage::
+#:
+#:     @router.get("/users/")
+#:     async def list_users(
+#:         _: Annotated[AuthenticatedUser, ManagerOrAbove],
+#:         ...
+#:     ) -> PaginatedUsersResponse:
+#:         ...
+ManagerOrAbove = Depends(require_role(UserRole.ADMIN, UserRole.MANAGER))
