@@ -13,8 +13,11 @@ Exception Hierarchy
 ``RetailSenseError``               — base for all application exceptions
   ├── ``UserNotFoundError``        — lookup by id or email yielded no result
   ├── ``UserAlreadyExistsError``   — email collision on creation
-  └── ``ForbiddenOperationError``  — actor lacks permission for the operation
-                                     (e.g. admin attempting self-modification)
+  ├── ``ForbiddenOperationError``  — actor lacks permission for the operation
+  |                                  (e.g. admin attempting self-modification)
+  ├── ``CustomerNotFoundError``    — customer lookup by id yielded no result
+  └── ``CustomerAlreadyExistsError`` — email or phone collision on
+                                       creation / update
 
 Usage
 -----
@@ -85,5 +88,39 @@ class ForbiddenOperationError(RetailSenseError):
         if actor_id == target_id:
             raise ForbiddenOperationError(
                 "Administrators cannot modify their own role or active status."
+            )
+    """
+
+
+# --------------------------------------------------------------------------- #
+# Customer-domain exceptions                                                    #
+# --------------------------------------------------------------------------- #
+
+
+class CustomerNotFoundError(RetailSenseError):
+    """Raised when a customer lookup by id, email, or phone yields no result.
+
+    Callers should translate this into ``HTTP 404 Not Found``.
+
+    Example::
+
+        customer = await repo.get_by_id(cid)
+        if customer is None:
+            raise CustomerNotFoundError(f"No customer found with id '{cid}'.")
+    """
+
+
+class CustomerAlreadyExistsError(RetailSenseError):
+    """Raised when a customer cannot be created or updated because a unique
+    constraint would be violated (email or phone already belongs to another
+    customer record).
+
+    Callers should translate this into ``HTTP 409 Conflict``.
+
+    Example::
+
+        if await repo.exists_by_email(email):
+            raise CustomerAlreadyExistsError(
+                f"A customer with the email '{email}' already exists."
             )
     """

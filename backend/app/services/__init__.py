@@ -15,6 +15,11 @@ Pattern
         async def list_products(self) -> list[Product]:
             result = await self.db.execute(select(Product))
             return list(result.scalars().all())
+
+Sprint history
+--------------
+3.2  AuthService, UserService added.
+4.2.3  CustomerService added.
 """
 
 from app.services.auth_service import (  # noqa: F401
@@ -24,11 +29,19 @@ from app.services.auth_service import (  # noqa: F401
     RegistrationError,
     UserNotFoundError,
 )
+from app.services.customer_service import (  # noqa: F401
+    CustomerService,
+    CustomerPage,
+)
 
 __all__ = [
+    # auth / user
     "AuthService",
     "AuthenticationError",
     "LoginResult",
     "RegistrationError",
     "UserNotFoundError",
+    # customer
+    "CustomerService",
+    "CustomerPage",
 ]

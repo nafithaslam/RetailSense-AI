@@ -19,8 +19,14 @@ Pattern
                 select(Product).where(Product.id == product_id)
             )
             return result.scalar_one_or_none()
+
+Sprint history
+--------------
+3.2  UserRepository added.
+4.2.2  CustomerRepository added.
 """
 
-from app.repositories.user_repository import UserRepository  # noqa: F401
+from app.repositories.user_repository import UserRepository          # noqa: F401
+from app.repositories.customer_repository import CustomerRepository  # noqa: F401
 
-__all__ = ["UserRepository"]
+__all__ = ["UserRepository", "CustomerRepository"]

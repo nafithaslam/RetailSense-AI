@@ -50,6 +50,9 @@ Role matrix summary
 | suppliers:write   |  ✅   |   ✅    |       |
 | settings:read     |  ✅   |   ✅    |       |
 | settings:write    |  ✅   |         |       |
+| customers:read    |  ✅   |   ✅    |  ✅   |
+| customers:write   |  ✅   |   ✅    |       |
+| customers:delete  |  ✅   |         |       |
 +-------------------+-------+---------+-------+
 
 Usage
@@ -108,6 +111,11 @@ class Permission(str, enum.Enum):
     SETTINGS_READ = "settings:read"
     SETTINGS_WRITE = "settings:write"
 
+    # --- Customers ---------------------------------------------------------
+    CUSTOMERS_READ = "customers:read"
+    CUSTOMERS_WRITE = "customers:write"
+    CUSTOMERS_DELETE = "customers:delete"
+
 
 # --------------------------------------------------------------------------- #
 # Role → permissions matrix                                                    #
@@ -130,6 +138,8 @@ ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {
         Permission.SUPPLIERS_READ,
         Permission.SUPPLIERS_WRITE,
         Permission.SETTINGS_READ,
+        Permission.CUSTOMERS_READ,
+        Permission.CUSTOMERS_WRITE,
     }),
 
     UserRole.STAFF: frozenset({
@@ -137,6 +147,7 @@ ROLE_PERMISSIONS: dict[UserRole, frozenset[Permission]] = {
         Permission.SALES_READ,
         Permission.SALES_WRITE,
         Permission.SUPPLIERS_READ,
+        Permission.CUSTOMERS_READ,
     }),
 }
 
